@@ -1,0 +1,3 @@
+[submodule "proscript"]
+	path = proscript
+	url = https://github.com/alpoktem/proscript.git
