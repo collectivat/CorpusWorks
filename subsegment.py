@@ -74,40 +74,53 @@ def to_proscript(srt_data):
 
 		transcript = srt_entry.text_without_tags.strip()
 
-		if transcript and not transcript.isspace():
-			if first_utterance:
-				curr_seg = Segment()
-				curr_seg.start_time = start_time
-				curr_seg.end_time = end_time
-				curr_seg.transcript += transcript
-				first_utterance = False
-			elif curr_seg.transcript[-1] in SENTENCE_END_MARKS:
+		if options.merge_to_sentences:
+			#merges subtitle entries to complete sentences. The srt needs to be well punctuated
+			if transcript and not transcript.isspace():
+				if first_utterance:
+					curr_seg = Segment()
+					curr_seg.start_time = start_time
+					curr_seg.end_time = end_time
+					curr_seg.transcript += transcript
+					first_utterance = False
+				elif curr_seg.transcript[-1] in SENTENCE_END_MARKS:
+					if curr_seg.transcript and not curr_seg.transcript.isspace():
+						segment_count += 1
+						curr_seg.id = segment_count
+						curr_seg.transcript = normalize_transcript(curr_seg.transcript)
+						proscript.add_segment(curr_seg)
+						# print("----====----")
+						# curr_seg.to_string()
+						# print("----====----")
+					curr_seg = Segment()
+					curr_seg.start_time = start_time
+					curr_seg.end_time = end_time
+					curr_seg.transcript += transcript
+					#print("curr_seg:\n%s"%curr_seg.transcript)
+				else:
+					curr_seg.end_time = subriptime_to_seconds(srt_entry.end)
+					curr_seg.transcript += ' ' + transcript
+					#print("curr_seg:\n%s"%curr_seg.transcript)
+
+			if index == len(srt_data) - 1:
 				if curr_seg.transcript and not curr_seg.transcript.isspace():
 					segment_count += 1
 					curr_seg.id = segment_count
-					curr_seg.transcript = normalize_transcript(curr_seg.transcript)
+					curr_seg.transcript = normalize_transcript(transcript)
 					proscript.add_segment(curr_seg)
-					# print("----====----")
 					# curr_seg.to_string()
 					# print("----====----")
+		else:
+			#each subtitle entry is a segment
+			if transcript and not transcript.isspace():
 				curr_seg = Segment()
 				curr_seg.start_time = start_time
 				curr_seg.end_time = end_time
-				curr_seg.transcript += transcript
-				#print("curr_seg:\n%s"%curr_seg.transcript)
-			else:
-				curr_seg.end_time = subriptime_to_seconds(srt_entry.end)
-				curr_seg.transcript += ' ' + transcript
-				#print("curr_seg:\n%s"%curr_seg.transcript)
-
-		if index == len(srt_data) - 1:
-			if curr_seg.transcript and not curr_seg.transcript.isspace():
+				curr_seg.transcript = transcript
 				segment_count += 1
 				curr_seg.id = segment_count
-				curr_seg.transcript = normalize_transcript(transcript)
+				curr_seg.transcript = normalize_transcript(curr_seg.transcript)
 				proscript.add_segment(curr_seg)
-				# curr_seg.to_string()
-				# print("----====----")
 	return proscript
 
 def main(options):
@@ -115,7 +128,7 @@ def main(options):
 	checkArgument(options.subfile, isFile=True)
 	checkArgument(options.outdir, isDir=True, createDir=True)
 
-	print("Audio: %s\nSubtitles: %s\nLanguage: %s\nTranscription: %s"%(options.audiofile, options.subfile, options.movielang, options.transcribe_dub))
+	print("Audio: %s\nSubtitles: %s\nLanguage: %s"%(options.audiofile, options.subfile, options.file_prefix))
 	print("Reading subtitles...", end="")
 	srtData = pysrt.open(options.subfile)
 	print("done")
@@ -124,12 +137,12 @@ def main(options):
 
 	movie_proscript = to_proscript(srtData)
 
-	proscript_file = "%s/%s_proscript.csv"%(options.outdir, options.movielang)
+	proscript_file = "%s/%s_proscript.csv"%(options.outdir, options.file_prefix)
 	movie_proscript.segments_to_csv(proscript_file, ['id', 'start_time', 'end_time', 'transcript'], delimiter='|')
 	print("Segments info written to %s"%proscript_file)
 
 	print("Segmenting subtitle entries...", end="")
-	extract_audio_segments(movie_proscript, audio, options.outdir, file_prefix=options.movielang)
+	extract_audio_segments(movie_proscript, audio, options.outdir, file_prefix=options.file_prefix)
 	print("done.")
 	
 
@@ -140,8 +153,9 @@ if __name__ == "__main__":
     parser.add_option("-s", "--sub", dest="subfile", default=None, help="subtitle file (srt)", type="string")
     parser.add_option("-o", "--output-dir", dest="outdir", default=None, help="Directory to output segments and sentences", type="string")
     parser.add_option("-l", "--lang", dest="movielang", default="", help="Language of the movie audio (Three letter ISO 639-2/T code)", type="string")
-    parser.add_option("-t", "--transcribe", dest="transcribe_dub", action="store_true", default=False, help="send dubbed audio segments to wit.ai")
+    parser.add_option("-p", "--prefix", dest="file_prefix", default="", help="Prefix for naming files", type="string")
     parser.add_option("-f", "--audioformat", dest="audioformat", default="wav", help="Audio format (wav, mp3 etc.)", type="string")
+    parser.add_option("-m", "--merge-to-sentences", dest="merge_to_sentences", action="store_true", default=False, help="Merges subtitle entries to full sentences. (Srt needs to be well punctuated)")
 
     (options, args) = parser.parse_args()
 
